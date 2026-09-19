@@ -1,0 +1,5 @@
+Modelo,Accuracy/R²,K-Fold CV,RMSE,MAE,Notas
+kNN,0.7931,0.8011±0.0904,-,-,k=3
+Lineal,0.8729,0.8626±0.0197,0.5252,0.4310,Baseline
+Random Forest,0.9993,0.9971±0.0014,0.0390,0.0294,n_est=100
+MLP,0.9595,N/A,0.2967,0.1856,Ep=100

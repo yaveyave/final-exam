@@ -1,0 +1,93 @@
+# Entorno virtual
+venv/
+env/
+ENV/
+.venv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Modelos entrenados (GRANDES)
+results/models/*.pkl
+results/models/*.keras
+results/models/*.h5
+results/models/*.joblib
+
+# Datos procesados
+data/processed/tsp_dataset.csv
+data/processed/*.csv
+
+# Análisis y gráficos (opcionalmente excluir)
+# results/analysis/
+# results/plots/
+
+# Logs
+*.log
+logs/
+
+# Streamlit
+.streamlit/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Archivos temporales
+*.tmp
+*.temp
+.temp/
+
+# Credenciales (IMPORTANTE para Streamlit Cloud)
+.env
+.env.local
+secrets.toml
+.streamlit/secrets.toml
+
+# Datos crudos sin procesar (si los tienes)
+data/raw/
+*.tsp
+
+# Cache de pytest
+.pytest_cache/
+
+# Coverage
+htmlcov/
+.coverage
+
+# Archivos lock (opcional - mantener para reproducibilidad)
+# poetry.lock
+# Pipfile.lock
