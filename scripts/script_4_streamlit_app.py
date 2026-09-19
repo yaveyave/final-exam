@@ -8,7 +8,15 @@ Ejecutar con: streamlit run script_4_streamlit_app.py
 
 import os
 import sys
-os.chdir(os.path.dirname(os.path.abspath(__file__)) + '/..')
+
+# ===== RUTAS ABSOLUTAS =====
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_DIR = os.path.join(BASE_DIR, 'results', 'models')
+ANALYSIS_DIR = os.path.join(BASE_DIR, 'results', 'analysis')
+PLOTS_DIR = os.path.join(BASE_DIR, 'results', 'plots')
+DATA_DIR = os.path.join(BASE_DIR, 'data', 'processed')
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
 import pandas as pd
@@ -29,17 +37,17 @@ st.markdown("Predicción de dureza computacional del Problema del Viajante media
 @st.cache_resource
 def load_models():
     """Carga modelos entrenados desde disco"""
-    knn = joblib.load('results/models/model_knn.pkl')
-    lineal = joblib.load('results/models/model_lineal.pkl')
-    rf = joblib.load('results/models/model_rf.pkl')
-    mlp = keras.models.load_model('results/models/model_mlp.keras')
-    scaler = joblib.load('results/models/scaler.pkl')
+    knn = joblib.load(os.path.join(MODELS_DIR, 'model_knn.pkl'))
+    lineal = joblib.load(os.path.join(MODELS_DIR, 'model_lineal.pkl'))
+    rf = joblib.load(os.path.join(MODELS_DIR, 'model_rf.pkl'))
+    mlp = keras.models.load_model(os.path.join(MODELS_DIR, 'model_mlp.keras'))
+    scaler = joblib.load(os.path.join(MODELS_DIR, 'scaler.pkl'))
     return knn, lineal, rf, mlp, scaler
 
 @st.cache_data
 def load_data():
     """Carga dataset procesado"""
-    df = pd.read_csv('data/processed/tsp_dataset.csv')
+    df = pd.read_csv(os.path.join(DATA_DIR, 'tsp_dataset.csv'))
     return df
 
 # Cargar modelos y datos
@@ -191,7 +199,7 @@ with tab3:
     
     st.subheader("Feature Importance (Random Forest)")
     try:
-        importance = pd.read_csv('results/analysis/feature_importance.csv')
+        importance = pd.read_csv(os.path.join(ANALYSIS_DIR, 'feature_importance.csv'))
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.barh(importance['Feature'], importance['Importance'], color='steelblue')
         ax.set_xlabel('Importancia', fontsize=11, fontweight='bold')
@@ -253,15 +261,15 @@ with tab4:
         """)
     
     # Intenta cargar y mostrar gráfica de matriz de confusión
-    if os.path.exists('results/plots/confusion_matrix_knn.png'):
-        st.image('results/plots/confusion_matrix_knn.png', caption='Matriz de Confusión - kNN', use_container_width=True)
-    
+    if os.path.exists(os.path.join(PLOTS_DIR, 'confusion_matrix_knn.png')):
+        st.image(os.path.join(PLOTS_DIR, 'confusion_matrix_knn.png'), caption='Matriz de Confusión - kNN', use_container_width=True)
+
     st.divider()
-    
+
     st.subheader("Learning Curves - MLP")
-    
-    if os.path.exists('results/plots/mlp_learning_curves.png'):
-        st.image('results/plots/mlp_learning_curves.png', caption='Curvas de aprendizaje - MLP Keras', use_container_width=True)
+
+    if os.path.exists(os.path.join(PLOTS_DIR, 'mlp_learning_curves.png')):
+        st.image(os.path.join(PLOTS_DIR, 'mlp_learning_curves.png'), caption='Curvas de aprendizaje - MLP Keras', use_container_width=True)
     else:
         st.info("Learning curves no disponibles aún. Ejecuta script_2_train_models.py")
 
@@ -279,7 +287,7 @@ with tab5:
     """)
     
     try:
-        extrap = pd.read_csv('results/analysis/extrapolation_results.csv')
+        extrap = pd.read_csv(os.path.join(ANALYSIS_DIR, 'extrapolation_results.csv'))
         
         col1, col2, col3 = st.columns(3)
         
@@ -332,12 +340,12 @@ with tab5:
         
         st.subheader("Gráficos de Extrapolación")
         
-        if os.path.exists('results/plots/extrapolation_error_vs_size.png'):
-            st.image('results/plots/extrapolation_error_vs_size.png', 
+        if os.path.exists(os.path.join(PLOTS_DIR, 'extrapolation_error_vs_size.png')):
+            st.image(os.path.join(PLOTS_DIR, 'extrapolation_error_vs_size.png'),
                     caption='Error vs Tamaño de Instancia', use_container_width=True)
-        
-        if os.path.exists('results/plots/extrapolation_actual_vs_pred.png'):
-            st.image('results/plots/extrapolation_actual_vs_pred.png', 
+
+        if os.path.exists(os.path.join(PLOTS_DIR, 'extrapolation_actual_vs_pred.png')):
+            st.image(os.path.join(PLOTS_DIR, 'extrapolation_actual_vs_pred.png'),
                     caption='Predicción Real vs Actual (Train vs Test)', use_container_width=True)
         
     except FileNotFoundError:
