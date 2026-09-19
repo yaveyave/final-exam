@@ -8,6 +8,7 @@ Ejecutar con: streamlit run script_4_streamlit_app.py
 
 import os
 import sys
+import re
 
 # ===== RUTAS ABSOLUTAS =====
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -49,6 +50,54 @@ def load_data():
     """Carga dataset procesado"""
     df = pd.read_csv(os.path.join(DATA_DIR, 'tsp_dataset.csv'))
     return df
+
+def _generate_synthetic_coords(n_cities, seed, distribution):
+    """Reproduce de forma determinista las coordenadas generadas en script_1_dataset.py"""
+    np.random.seed(seed)
+    coords = {}
+    if distribution == 'uniform':
+        for i in range(1, n_cities + 1):
+            coords[i] = (np.random.uniform(0, 100), np.random.uniform(0, 100))
+    elif distribution == 'normal':
+        for i in range(1, n_cities + 1):
+            x = np.random.normal(50, 20)
+            y = np.random.normal(50, 20)
+            coords[i] = (max(0, min(100, x)), max(0, min(100, y)))
+    elif distribution == 'clustered':
+        n_clusters = np.random.randint(3, 6)
+        cluster_centers = [(np.random.uniform(10, 90), np.random.uniform(10, 90)) for _ in range(n_clusters)]
+        for i in range(1, n_cities + 1):
+            center = cluster_centers[i % n_clusters]
+            x = center[0] + np.random.normal(0, 5)
+            y = center[1] + np.random.normal(0, 5)
+            coords[i] = (max(0, min(100, x)), max(0, min(100, y)))
+    return coords
+
+def get_instance_coords(row):
+    """Recupera las coordenadas exactas de una instancia sintética a partir de su filename"""
+    match = re.match(r'syn_(\d+)_(small|medium|large)_\d+_(uniform|normal|clustered)', row['filename'])
+    if not match:
+        return None
+    filenum, category, dist_type = int(match.group(1)), match.group(2), match.group(3)
+    n = int(row['n_cities'])
+    if category == 'small':
+        seed = n * 1000 + filenum
+    elif category == 'medium':
+        seed = n * 1000 + (filenum - 20)
+    else:
+        seed = n * 1000 + (filenum - 100)
+    return _generate_synthetic_coords(n, seed, dist_type)
+
+def humanize_time(seconds):
+    """Convierte segundos a un texto legible"""
+    if seconds < 1:
+        return f"{seconds * 1000:.0f} ms"
+    elif seconds < 60:
+        return f"{seconds:.2f} seg"
+    elif seconds < 3600:
+        return f"{seconds / 60:.1f} min"
+    else:
+        return f"{seconds / 3600:.1f} h"
 
 # Cargar modelos y datos
 try:
@@ -96,72 +145,185 @@ with tab1:
 
 # ===== TAB 2: PREDICTOR =====
 with tab2:
-    st.header("Predictor Interactivo")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Selecciona instancia")
+    st.header("Predictor Interactivo - Predice la Dureza del TSP")
+
+    st.markdown("""
+    Selecciona una instancia del *Traveling Salesman Problem* (TSP) y los 4 modelos de ML
+    predecirán qué tan difícil es resolverla. Compará cómo cada modelo interpreta la
+    dificultad, y verificá la predicción contra el tiempo real que tardó el algoritmo exacto.
+    """)
+
+    col_izq, col_der = st.columns([1, 1])
+
+    with col_izq:
+        st.subheader("Selecciona una instancia")
         selected_instance = st.selectbox(
             "Instancia:",
             df['filename'].values,
             key="instance_selector"
         )
-        
+
         idx = df[df['filename'] == selected_instance].index[0]
         instance = df.loc[idx]
-        
-        # Preparar características
-        X_inst = np.array([[
-            instance['n_cities'],
-            instance['avg_distance'],
-            instance['std_distance'],
-            instance['max_distance'],
-            instance['cv_distance']
-        ]])
-        X_inst_scaled = scaler.transform(X_inst)
-        
-        st.subheader("Características de la instancia")
-        st.metric("Número de ciudades", int(instance['n_cities']))
-        st.metric("Distancia promedio", f"{instance['avg_distance']:.2f}")
-        st.metric("Desviación estándar", f"{instance['std_distance']:.2f}")
-        st.metric("Distancia máxima", f"{instance['max_distance']:.2f}")
-        st.metric("Coef. variación", f"{instance['cv_distance']:.4f}")
-    
-    with col2:
-        st.subheader("Predicciones de los modelos")
-        
-        # kNN
-        class_pred = knn.predict(X_inst_scaled)[0]
-        class_mapping = {0: 'Easy', 1: 'Medium', 2: 'Hard'}
-        difficulty = class_mapping[class_pred]
-        
-        st.write("**kNN - Clasificación de dificultad:**")
-        if difficulty == 'Easy':
-            st.success(f"Dificultad: {difficulty}")
-        elif difficulty == 'Medium':
-            st.info(f"Dificultad: {difficulty}")
+
+        coords = get_instance_coords(instance)
+        if coords is not None:
+            fig_map, ax_map = plt.subplots(figsize=(5, 5))
+            xs = [c[0] for c in coords.values()]
+            ys = [c[1] for c in coords.values()]
+            ax_map.scatter(xs, ys, s=40, color='steelblue', edgecolor='white', zorder=3)
+            ax_map.set_title(f"{int(instance['n_cities'])} ciudades", fontsize=11, fontweight='bold')
+            ax_map.set_xlim(-5, 105)
+            ax_map.set_ylim(-5, 105)
+            ax_map.grid(True, alpha=0.3)
+            ax_map.set_xticks([])
+            ax_map.set_yticks([])
+            st.pyplot(fig_map)
+            plt.close(fig_map)
         else:
-            st.warning(f"Dificultad: {difficulty}")
-        
-        st.write("**Regresión - log(tiempo de solución):**")
-        
-        log_time_lineal = lineal.predict(X_inst_scaled)[0]
-        st.metric("Regresión Lineal", f"{log_time_lineal:.4f}")
-        
-        log_time_rf = rf.predict(X_inst_scaled)[0]
-        st.metric("Random Forest", f"{log_time_rf:.4f}")
-        
-        log_time_mlp = mlp.predict(X_inst_scaled, verbose=0)[0][0]
-        st.metric("MLP Keras", f"{log_time_mlp:.4f}")
-    
+            st.info("Visualización no disponible para esta instancia")
+
+    with col_der:
+        st.subheader("¿Qué vas a ver?")
+        st.markdown("""
+        - **kNN** clasifica la instancia en Easy, Medium o Hard.
+        - **Regresión Lineal, Random Forest y MLP** predicen `log(tiempo)`, que abajo
+          traducimos a un tiempo estimado en segundos.
+        - Cada modelo interpreta la dificultad de forma distinta. Comparalos y fijate si coinciden.
+        """)
+        st.caption("Este predictor demuestra que la dureza del TSP NO es lineal: el tiempo de solución crece exponencialmente con el número de ciudades.")
+
+    # Preparar características y predicciones
+    X_inst = np.array([[
+        instance['n_cities'],
+        instance['avg_distance'],
+        instance['std_distance'],
+        instance['max_distance'],
+        instance['cv_distance']
+    ]])
+    X_inst_scaled = scaler.transform(X_inst)
+
+    class_pred = knn.predict(X_inst_scaled)[0]
+    class_mapping = {0: 'Easy', 1: 'Medium', 2: 'Hard'}
+    difficulty = class_mapping[class_pred]
+
+    log_time_lineal = lineal.predict(X_inst_scaled)[0]
+    log_time_rf = rf.predict(X_inst_scaled)[0]
+    log_time_mlp = mlp.predict(X_inst_scaled, verbose=0)[0][0]
+
     st.divider()
-    
-    st.subheader("Valor real")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Instancia", instance['filename'])
-    col2.metric("log(tiempo)", f"{instance['log_time']:.4f}")
-    col3.metric("Clase real", instance['difficulty_class'])
+    st.subheader("Predicciones de los 4 modelos")
+
+    difficulty_explain = {
+        'Easy': "Pocos obstáculos geométricos, solución rápida (~segundos).",
+        'Medium': "Complejidad media, requiere más exploración.",
+        'Hard': "Muy compleja, tiempo de resolución exponencial."
+    }
+    pct_rank = (df['log_time'] <= instance['log_time']).mean() * 100
+
+    p1, p2, p3, p4 = st.columns(4)
+
+    with p1:
+        st.markdown("##### kNN")
+        if difficulty == 'Easy':
+            st.success(f"**{difficulty}**")
+        elif difficulty == 'Medium':
+            st.info(f"**{difficulty}**")
+        else:
+            st.warning(f"**{difficulty}**")
+        st.progress(min(100, max(0, int(pct_rank))) / 100)
+        st.caption(f"{difficulty_explain[difficulty]} (percentil {pct_rank:.0f} del dataset)")
+
+    with p2:
+        st.markdown("##### Regresión Lineal")
+        st.metric("Tiempo estimado", humanize_time(np.exp(log_time_lineal)))
+        st.caption(f"log(tiempo) = {log_time_lineal:.3f}")
+
+    with p3:
+        st.markdown("##### Random Forest")
+        st.metric("Tiempo estimado", humanize_time(np.exp(log_time_rf)))
+        st.caption(f"log(tiempo) = {log_time_rf:.3f}")
+
+    with p4:
+        st.markdown("##### MLP")
+        st.metric("Tiempo estimado", humanize_time(np.exp(log_time_mlp)))
+        st.caption(f"log(tiempo) = {log_time_mlp:.3f}")
+
+    medians = df.groupby('difficulty_class')['solution_time_seconds'].median()
+    st.caption(
+        f"Para contexto, en el dataset una instancia Easy tarda en promedio "
+        f"{humanize_time(medians.get('Easy', float('nan')))}, y una Hard tarda "
+        f"{humanize_time(medians.get('Hard', float('nan')))}."
+    )
+
+    with st.expander("¿Qué significan estos números?"):
+        st.markdown("""
+        **¿Qué es `log(tiempo)`?**
+        En vez de predecir el tiempo de solución directamente (que varía en órdenes de
+        magnitud, de milisegundos a horas), los modelos de regresión predicen su logaritmo
+        natural. Esto estabiliza el entrenamiento porque comprime esa variación exponencial
+        en una escala más manejable. Para leer el resultado como tiempo real aplicamos la
+        operación inversa: `tiempo = e^(log(tiempo))`.
+
+        **¿Por qué los 4 modelos dan respuestas distintas?**
+        Cada uno aprende un patrón diferente a partir de los mismos datos:
+        - kNN compara la instancia con sus vecinos más parecidos y vota por una clase.
+        - La Regresión Lineal asume que la dificultad crece de forma suave y proporcional.
+        - Random Forest combina cientos de árboles de decisión, capturando relaciones no lineales.
+        - El MLP (red neuronal) aprende una función no lineal todavía más flexible.
+
+        **¿En cuál modelo confiar más?**
+        Random Forest es el más preciso en este proyecto (R² = 0.9996 en test, frente a
+        0.9034 de la Regresión Lineal y 0.9754 del MLP), por lo que sus predicciones son la
+        referencia más confiable entre los tres modelos de regresión.
+        """)
+
+    st.divider()
+    st.subheader("Predicción vs. valor real")
+
+    real_time = float(instance['solution_time_seconds'])
+    comparison_data = {
+        'Fuente': ['Real', 'Regresión Lineal', 'Random Forest', 'MLP'],
+        'Tiempo estimado (s)': [real_time, np.exp(log_time_lineal), np.exp(log_time_rf), np.exp(log_time_mlp)],
+    }
+    comp_df = pd.DataFrame(comparison_data)
+    comp_df['Tiempo'] = comp_df['Tiempo estimado (s)'].apply(humanize_time)
+    comp_df['Error vs. real'] = comp_df['Tiempo estimado (s)'].apply(
+        lambda t: 'N/A' if t == real_time else f"{abs(t - real_time) / real_time * 100:.1f}%"
+    )
+    st.table(comp_df[['Fuente', 'Tiempo', 'Error vs. real']])
+
+    fig_bar, ax_bar = plt.subplots(figsize=(8, 3.5))
+    colors_bar = ['#2c3e50', '#4C72B0', '#55A868', '#C44E52']
+    ax_bar.bar(comparison_data['Fuente'], comparison_data['Tiempo estimado (s)'], color=colors_bar)
+    ax_bar.set_ylabel('Tiempo (segundos, escala log)')
+    ax_bar.set_yscale('log')
+    ax_bar.set_title('Comparación: tiempo real vs. predicho por cada modelo', fontsize=11, fontweight='bold')
+    ax_bar.grid(True, alpha=0.3, axis='y')
+    st.pyplot(fig_bar)
+    plt.close(fig_bar)
+
+    st.caption(f"Clase real de la instancia: {instance['difficulty_class']}")
+
+    with st.expander("Detalles técnicos"):
+        st.markdown("**Características de la instancia (input de los modelos):**")
+        features_df = pd.DataFrame({
+            'Característica': ['Número de ciudades', 'Distancia promedio', 'Desviación estándar', 'Distancia máxima', 'Coef. de variación'],
+            'Valor': [
+                str(int(instance['n_cities'])),
+                f"{instance['avg_distance']:.2f}",
+                f"{instance['std_distance']:.2f}",
+                f"{instance['max_distance']:.2f}",
+                f"{instance['cv_distance']:.4f}"
+            ]
+        })
+        st.table(features_df)
+        st.markdown(f"""
+        **Valores reales de referencia:**
+        - Instancia: `{instance['filename']}`
+        - log(tiempo) real: `{instance['log_time']:.4f}`
+        - Clase real: `{instance['difficulty_class']}`
+        """)
 
 # ===== TAB 3: DESEMPEÑO =====
 with tab3:
